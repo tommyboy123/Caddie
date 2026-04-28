@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0a1a0f">
 <title>Caddie — Golf GPS</title>
-<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Caddie&quot;,&quot;short_name&quot;:&quot;Caddie&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;#0a1a0f&quot;}">
+<link rel="manifest" href="manifest.webmanifest">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -433,18 +433,18 @@
 // Replace these coordinates with your actual course GPS data
 const COURSES = [
   {
-    id: 'demo',
-    name: 'Demo Course',
+    id: 'humeston',
+    name: 'Humeston Lakeside Golf Course',
     holes: [
-      { hole:1, par:4, yards:385, tee:{lat:37.3350,lng:-122.0090}, front:{lat:37.3358,lng:-122.0092}, pin:{lat:37.3360,lng:-122.0092}, back:{lat:37.3362,lng:-122.0092} },
-      { hole:2, par:3, yards:175, tee:{lat:37.3365,lng:-122.0095}, front:{lat:37.3370,lng:-122.0090}, pin:{lat:37.3371,lng:-122.0090}, back:{lat:37.3372,lng:-122.0090} },
-      { hole:3, par:5, yards:520, tee:{lat:37.3374,lng:-122.0085}, front:{lat:37.3386,lng:-122.0080}, pin:{lat:37.3388,lng:-122.0080}, back:{lat:37.3390,lng:-122.0080} },
-      { hole:4, par:4, yards:410, tee:{lat:37.3393,lng:-122.0082}, front:{lat:37.3402,lng:-122.0075}, pin:{lat:37.3403,lng:-122.0075}, back:{lat:37.3405,lng:-122.0075} },
-      { hole:5, par:4, yards:395, tee:{lat:37.3408,lng:-122.0070}, front:{lat:37.3418,lng:-122.0065}, pin:{lat:37.3419,lng:-122.0065}, back:{lat:37.3421,lng:-122.0065} },
-      { hole:6, par:3, yards:155, tee:{lat:37.3424,lng:-122.0068}, front:{lat:37.3428,lng:-122.0062}, pin:{lat:37.3429,lng:-122.0062}, back:{lat:37.3430,lng:-122.0062} },
-      { hole:7, par:5, yards:540, tee:{lat:37.3432,lng:-122.0058}, front:{lat:37.3446,lng:-122.0050}, pin:{lat:37.3448,lng:-122.0050}, back:{lat:37.3450,lng:-122.0050} },
-      { hole:8, par:4, yards:375, tee:{lat:37.3452,lng:-122.0053}, front:{lat:37.3460,lng:-122.0045}, pin:{lat:37.3462,lng:-122.0045}, back:{lat:37.3463,lng:-122.0045} },
-      { hole:9, par:4, yards:400, tee:{lat:37.3465,lng:-122.0042}, front:{lat:37.3475,lng:-122.0035}, pin:{lat:37.3477,lng:-122.0035}, back:{lat:37.3479,lng:-122.0035} },
+      { hole:1, par:4, yards:276, tee:{lat:40.877917,lng:-93.507247}, front:{lat:40.880087,lng:-93.507679}, pin:{lat:40.880139,lng:-93.507680}, back:{lat:40.880191,lng:-93.507677} },
+      { hole:2, par:4, yards:335, tee:{lat:40.880335,lng:-93.508271}, front:{lat:40.877693,lng:-93.507897}, pin:{lat:40.877636,lng:-93.507897}, back:{lat:40.877575,lng:-93.507895} },
+      { hole:3, par:3, yards:140, tee:{lat:40.877425,lng:-93.507353}, front:{lat:40.876475,lng:-93.508136}, pin:{lat:40.876443,lng:-93.508159}, back:{lat:40.876409,lng:-93.508171} },
+      { hole:4, par:5, yards:448, tee:{lat:40.876727,lng:-93.508585}, front:{lat:40.880324,lng:-93.508848}, pin:{lat:40.880375,lng:-93.508847}, back:{lat:40.880430,lng:-93.508843} },
+      { hole:5, par:3, yards:180, tee:{lat:40.881104,lng:-93.508679}, front:{lat:40.881027,lng:-93.510571}, pin:{lat:40.881022,lng:-93.510637}, back:{lat:40.881022,lng:-93.510706} },
+      { hole:6, par:3, yards:105, tee:{lat:40.881243,lng:-93.510414}, front:{lat:40.882051,lng:-93.510056}, pin:{lat:40.882101,lng:-93.510028}, back:{lat:40.882153,lng:-93.510005} },
+      { hole:7, par:4, yards:257, tee:{lat:40.882434,lng:-93.509851}, front:{lat:40.880836,lng:-93.511258}, pin:{lat:40.880780,lng:-93.511258}, back:{lat:40.880726,lng:-93.511262} },
+      { hole:8, par:5, yards:400, tee:{lat:40.880514,lng:-93.511419}, front:{lat:40.880388,lng:-93.507307}, pin:{lat:40.880372,lng:-93.507246}, back:{lat:40.880350,lng:-93.507184} },
+      { hole:9, par:4, yards:263, tee:{lat:40.880228,lng:-93.506847}, front:{lat:40.878126,lng:-93.506663}, pin:{lat:40.878071,lng:-93.506661}, back:{lat:40.878018,lng:-93.506666} },
     ]
   }
 ];
@@ -777,6 +777,14 @@ document.getElementById('courseModal').onclick = e => { if(e.target.id === 'cour
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 initMap();
 startGPS();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => {
+      console.warn('SW registration failed:', err);
+    });
+  });
+}
 </script>
 </body>
 </html>
