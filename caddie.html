@@ -323,21 +323,6 @@
   .course-name { font-size: 14px; }
   .course-holes { font-size: 11px; color: var(--text-muted); }
 
-  /* ADD PIN MODE */
-  .pin-mode-banner {
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    background: rgba(230,57,70,0.9);
-    color: white;
-    text-align: center;
-    padding: 8px;
-    font-size: 12px;
-    letter-spacing: 0.08em;
-    z-index: 500;
-    display: none;
-  }
-  .pin-mode-banner.active { display: block; }
-
   /* Accuracy indicator */
   .accuracy-badge {
     font-size: 9px;
@@ -402,15 +387,12 @@
   <button id="nextHole">›</button>
 </div>
 
-<div id="map" style="position:relative;">
-  <div class="pin-mode-banner" id="pinBanner">📍 Tap map to place pin — tap again to confirm</div>
-</div>
+<div id="map" style="position:relative;"></div>
 
 <div class="bottom-panel">
   <div class="action-row">
     <button class="btn" id="btnCourse">Course</button>
     <button class="btn" id="btnCenter">Center</button>
-    <button class="btn primary" id="btnAddPin">Add Pin</button>
   </div>
   <div class="accuracy-badge" id="accuracyBadge"></div>
 </div>
@@ -485,8 +467,6 @@ let frontMarker = null;
 let backMarker = null;
 let teeMarker = null;
 let distanceLine = null;
-let addPinMode = false;
-let tempPinMarker = null;
 let watchId = null;
 
 // ─── HAVERSINE ────────────────────────────────────────────────────────────────
@@ -517,7 +497,6 @@ function initMap() {
   const hole = getCurrentHole();
   map.setView([hole.pin.lat, hole.pin.lng], 17);
 
-  map.on('click', onMapClick);
   renderHole();
 }
 
@@ -691,47 +670,6 @@ function updateHoleDots() {
   });
 }
 
-// ─── ADD PIN MODE ─────────────────────────────────────────────────────────────
-function toggleAddPinMode() {
-  addPinMode = !addPinMode;
-  document.getElementById('pinBanner').classList.toggle('active', addPinMode);
-  document.getElementById('btnAddPin').textContent = addPinMode ? 'Cancel' : 'Add Pin';
-  document.getElementById('btnAddPin').style.background = addPinMode ? '#e63946' : '';
-  document.getElementById('btnAddPin').style.borderColor = addPinMode ? '#e63946' : '';
-  if (!addPinMode && tempPinMarker) {
-    map.removeLayer(tempPinMarker);
-    tempPinMarker = null;
-  }
-}
-
-function onMapClick(e) {
-  if (!addPinMode) return;
-  const { lat, lng } = e.latlng;
-
-  if (tempPinMarker) map.removeLayer(tempPinMarker);
-
-  tempPinMarker = L.marker([lat, lng], { icon: makeIcon('#ff6b6b','?',28) })
-    .addTo(map)
-    .bindPopup(`
-      <div style="font-family:monospace;font-size:12px;color:#0a1a0f;">
-        <b>Save as pin?</b><br>
-        ${lat.toFixed(6)}, ${lng.toFixed(6)}<br><br>
-        <button onclick="confirmPin(${lat},${lng})" style="
-          background:#e63946;color:white;border:none;padding:4px 10px;
-          border-radius:3px;cursor:pointer;font-family:monospace;
-        ">✓ Confirm Pin</button>
-      </div>
-    `).openPopup();
-}
-
-window.confirmPin = function(lat, lng) {
-  const course = allCourses[currentCourseIdx];
-  savePinOverride(course.id, currentHoleIdx, { lat, lng });
-  toggleAddPinMode();
-  if (tempPinMarker) { map.removeLayer(tempPinMarker); tempPinMarker = null; }
-  renderHole();
-};
-
 // ─── COURSE MODAL ─────────────────────────────────────────────────────────────
 function openCourseModal() {
   const list = document.getElementById('courseList');
@@ -770,7 +708,6 @@ document.getElementById('prevHole').onclick = () => goToHole(currentHoleIdx - 1)
 document.getElementById('nextHole').onclick = () => goToHole(currentHoleIdx + 1);
 document.getElementById('btnCourse').onclick = openCourseModal;
 document.getElementById('btnCenter').onclick = centerMap;
-document.getElementById('btnAddPin').onclick = toggleAddPinMode;
 document.getElementById('closeModal').onclick = closeCourseModal;
 document.getElementById('courseModal').onclick = e => { if(e.target.id === 'courseModal') closeCourseModal(); };
 
