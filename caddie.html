@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a1a0f">
+<title>Caddie — Golf GPS</title>
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Caddie&quot;,&quot;short_name&quot;:&quot;Caddie&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;#0a1a0f&quot;}">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --green-deep: #0a1a0f;
+    --green-mid: #1a3a20;
+    --green-bright: #2d6a35;
+    --green-light: #4a9455;
+    --fairway: #7ec87e;
+    --cream: #f5f0e8;
+    --gold: #c9a84c;
+    --gold-light: #e8c96a;
+    --white: #ffffff;
+    --red-pin: #e63946;
+    --blue-tee: #457b9d;
+    --text-muted: #8aab8a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--green-deep);
+    color: var(--cream);
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 10px;
+    background: linear-gradient(180deg, #000 0%, var(--green-deep) 100%);
+    border-bottom: 1px solid var(--green-mid);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-style: italic;
+    color: var(--gold);
+    letter-spacing: 0.02em;
+  }
+
+  .logo span { color: var(--cream); font-style: normal; }
+
+  .gps-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .gps-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #555;
+    transition: background 0.4s;
+  }
+  .gps-dot.active { background: var(--fairway); box-shadow: 0 0 6px var(--fairway); animation: pulse 2s infinite; }
+  .gps-dot.searching { background: var(--gold); animation: pulse 0.8s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* DISTANCE CARDS */
+  .distance-bar {
+    display: flex;
+    gap: 1px;
+    background: var(--green-mid);
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--green-mid);
+  }
+
+  .dist-card {
+    flex: 1;
+    padding: 10px 8px 8px;
+    background: var(--green-deep);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .dist-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .dist-card.pin::before { background: var(--red-pin); }
+  .dist-card.front::before { background: var(--fairway); }
+  .dist-card.back::before { background: var(--gold); }
+  .dist-card.tee::before { background: var(--blue-tee); }
+
+  .dist-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }
+
+  .dist-value {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--cream);
+    transition: all 0.3s;
+  }
+  .dist-card.pin .dist-value { color: var(--white); }
+
+  .dist-unit {
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    margin-top: 1px;
+  }
+
+  /* HOLE SELECTOR */
+  .hole-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--green-mid);
+    flex-shrink: 0;
+  }
+
+  .hole-nav button {
+    background: none;
+    border: 1px solid var(--green-bright);
+    color: var(--cream);
+    width: 32px; height: 32px;
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .hole-nav button:active { background: var(--green-bright); }
+
+  .hole-info {
+    text-align: center;
+  }
+  .hole-number {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    color: var(--gold);
+  }
+  .hole-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .hole-dots {
+    display: flex;
+    gap: 3px;
+    justify-content: center;
+    margin-top: 4px;
+  }
+  .hole-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--green-bright);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .hole-dot.active { background: var(--gold); transform: scale(1.4); }
+
+  /* MAP */
+  #map {
+    flex: 1;
+    min-height: 0;
+    z-index: 1;
+  }
+
+  /* Leaflet overrides */
+  .leaflet-container { background: #1a2e1a; }
+  .leaflet-control-attribution { display: none; }
+  .leaflet-control-zoom { border: none !important; }
+  .leaflet-control-zoom a {
+    background: var(--green-mid) !important;
+    color: var(--cream) !important;
+    border: 1px solid var(--green-bright) !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+  }
+
+  /* Custom map markers */
+  .marker-pin-icon {
+    width: 28px; height: 34px;
+    position: relative;
+  }
+  .player-ring {
+    width: 36px; height: 36px;
+    border: 3px solid var(--fairway);
+    border-radius: 50%;
+    background: rgba(126,200,126,0.2);
+    animation: ripple 2s infinite;
+  }
+  @keyframes ripple {
+    0% { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(1.4); opacity: 0; }
+  }
+
+  /* BOTTOM PANEL */
+  .bottom-panel {
+    background: linear-gradient(0deg, #000 0%, var(--green-deep) 100%);
+    border-top: 1px solid var(--green-mid);
+    padding: 10px 16px 16px;
+    flex-shrink: 0;
+  }
+
+  .action-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 10px 8px;
+    border: 1px solid var(--green-bright);
+    background: transparent;
+    color: var(--cream);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:active { background: var(--green-bright); }
+  .btn.primary {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: var(--green-deep);
+    font-weight: 500;
+  }
+  .btn.primary:active { background: var(--gold-light); }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 1000;
+    display: flex;
+    align-items: flex-end;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    width: 100%;
+    background: var(--green-deep);
+    border-top: 2px solid var(--gold);
+    border-radius: 16px 16px 0 0;
+    padding: 20px;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    max-height: 80dvh;
+    overflow-y: auto;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+
+  .modal-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    color: var(--gold);
+    margin-bottom: 16px;
+    font-style: italic;
+  }
+
+  .modal-section { margin-bottom: 16px; }
+  .modal-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .course-list { display: flex; flex-direction: column; gap: 6px; }
+  .course-item {
+    padding: 10px 12px;
+    border: 1px solid var(--green-mid);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .course-item:active, .course-item.selected { border-color: var(--gold); background: rgba(201,168,76,0.08); }
+  .course-name { font-size: 14px; }
+  .course-holes { font-size: 11px; color: var(--text-muted); }
+
+  /* ADD PIN MODE */
+  .pin-mode-banner {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: rgba(230,57,70,0.9);
+    color: white;
+    text-align: center;
+    padding: 8px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    z-index: 500;
+    display: none;
+  }
+  .pin-mode-banner.active { display: block; }
+
+  /* Accuracy indicator */
+  .accuracy-badge {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 4px 0 0;
+    letter-spacing: 0.08em;
+  }
+
+  /* Distance line on map */
+  .distance-tooltip {
+    background: var(--green-deep) !important;
+    border: 1px solid var(--gold) !important;
+    color: var(--gold) !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 12px !important;
+    padding: 2px 8px !important;
+    border-radius: 3px !important;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Caddie<span>.</span></div>
+  <div class="gps-status">
+    <div class="gps-dot" id="gpsDot"></div>
+    <span id="gpsLabel">No GPS</span>
+  </div>
+</header>
+
+<div class="distance-bar">
+  <div class="dist-card pin">
+    <div class="dist-label">Pin</div>
+    <div class="dist-value" id="distPin">—</div>
+    <div class="dist-unit">yards</div>
+  </div>
+  <div class="dist-card front">
+    <div class="dist-label">Front</div>
+    <div class="dist-value" id="distFront">—</div>
+    <div class="dist-unit">yards</div>
+  </div>
+  <div class="dist-card back">
+    <div class="dist-label">Back</div>
+    <div class="dist-value" id="distBack">—</div>
+    <div class="dist-unit">yards</div>
+  </div>
+  <div class="dist-card tee">
+    <div class="dist-label">Tee</div>
+    <div class="dist-value" id="distTee">—</div>
+    <div class="dist-unit">yards</div>
+  </div>
+</div>
+
+<div class="hole-nav">
+  <button id="prevHole">‹</button>
+  <div class="hole-info">
+    <div class="hole-number" id="holeLabel">Hole 1</div>
+    <div class="hole-meta" id="holeMeta">Par 4 · 385 yds</div>
+    <div class="hole-dots" id="holeDots"></div>
+  </div>
+  <button id="nextHole">›</button>
+</div>
+
+<div id="map" style="position:relative;">
+  <div class="pin-mode-banner" id="pinBanner">📍 Tap map to place pin — tap again to confirm</div>
+</div>
+
+<div class="bottom-panel">
+  <div class="action-row">
+    <button class="btn" id="btnCourse">Course</button>
+    <button class="btn" id="btnCenter">Center</button>
+    <button class="btn primary" id="btnAddPin">Add Pin</button>
+  </div>
+  <div class="accuracy-badge" id="accuracyBadge"></div>
+</div>
+
+<!-- Course Modal -->
+<div class="modal-overlay" id="courseModal">
+  <div class="modal">
+    <div class="modal-title">Select Course</div>
+    <div class="modal-section">
+      <div class="modal-label">Available Courses</div>
+      <div class="course-list" id="courseList"></div>
+    </div>
+    <button class="btn" id="closeModal" style="width:100%;margin-top:8px;">Close</button>
+  </div>
+</div>
+
+<script>
+// ─── COURSE DATA ─────────────────────────────────────────────────────────────
+// Each hole has: pin (flag), front/back of green, tee box
+// Replace these coordinates with your actual course GPS data
+const COURSES = [
+  {
+    id: 'demo',
+    name: 'Demo Course',
+    holes: [
+      { hole:1, par:4, yards:385, tee:{lat:37.3350,lng:-122.0090}, front:{lat:37.3358,lng:-122.0092}, pin:{lat:37.3360,lng:-122.0092}, back:{lat:37.3362,lng:-122.0092} },
+      { hole:2, par:3, yards:175, tee:{lat:37.3365,lng:-122.0095}, front:{lat:37.3370,lng:-122.0090}, pin:{lat:37.3371,lng:-122.0090}, back:{lat:37.3372,lng:-122.0090} },
+      { hole:3, par:5, yards:520, tee:{lat:37.3374,lng:-122.0085}, front:{lat:37.3386,lng:-122.0080}, pin:{lat:37.3388,lng:-122.0080}, back:{lat:37.3390,lng:-122.0080} },
+      { hole:4, par:4, yards:410, tee:{lat:37.3393,lng:-122.0082}, front:{lat:37.3402,lng:-122.0075}, pin:{lat:37.3403,lng:-122.0075}, back:{lat:37.3405,lng:-122.0075} },
+      { hole:5, par:4, yards:395, tee:{lat:37.3408,lng:-122.0070}, front:{lat:37.3418,lng:-122.0065}, pin:{lat:37.3419,lng:-122.0065}, back:{lat:37.3421,lng:-122.0065} },
+      { hole:6, par:3, yards:155, tee:{lat:37.3424,lng:-122.0068}, front:{lat:37.3428,lng:-122.0062}, pin:{lat:37.3429,lng:-122.0062}, back:{lat:37.3430,lng:-122.0062} },
+      { hole:7, par:5, yards:540, tee:{lat:37.3432,lng:-122.0058}, front:{lat:37.3446,lng:-122.0050}, pin:{lat:37.3448,lng:-122.0050}, back:{lat:37.3450,lng:-122.0050} },
+      { hole:8, par:4, yards:375, tee:{lat:37.3452,lng:-122.0053}, front:{lat:37.3460,lng:-122.0045}, pin:{lat:37.3462,lng:-122.0045}, back:{lat:37.3463,lng:-122.0045} },
+      { hole:9, par:4, yards:400, tee:{lat:37.3465,lng:-122.0042}, front:{lat:37.3475,lng:-122.0035}, pin:{lat:37.3477,lng:-122.0035}, back:{lat:37.3479,lng:-122.0035} },
+    ]
+  }
+];
+
+// Load saved courses / pin edits from localStorage
+function loadCourses() {
+  const saved = localStorage.getItem('caddie_courses');
+  if (saved) {
+    try {
+      const extra = JSON.parse(saved);
+      return [...COURSES, ...extra];
+    } catch(e) {}
+  }
+  return [...COURSES];
+}
+
+function savePinOverride(courseId, holeIdx, pinData) {
+  const key = `caddie_pin_${courseId}_${holeIdx}`;
+  localStorage.setItem(key, JSON.stringify(pinData));
+}
+
+function loadPinOverride(courseId, holeIdx) {
+  const key = `caddie_pin_${courseId}_${holeIdx}`;
+  const v = localStorage.getItem(key);
+  return v ? JSON.parse(v) : null;
+}
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let allCourses = loadCourses();
+let currentCourseIdx = 0;
+let currentHoleIdx = 0;
+let playerPos = null;
+let playerAccuracy = null;
+let map = null;
+let playerMarker = null;
+let pinMarker = null;
+let frontMarker = null;
+let backMarker = null;
+let teeMarker = null;
+let distanceLine = null;
+let addPinMode = false;
+let tempPinMarker = null;
+let watchId = null;
+
+// ─── HAVERSINE ────────────────────────────────────────────────────────────────
+function haversineYards(lat1, lng1, lat2, lng2) {
+  const R = 6371000; // meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return Math.round((R * c) * 1.0936); // convert meters to yards
+}
+
+// ─── MAP INIT ─────────────────────────────────────────────────────────────────
+function initMap() {
+  map = L.map('map', {
+    zoomControl: true,
+    attributionControl: false,
+    tap: true
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 21,
+    maxNativeZoom: 19
+  }).addTo(map);
+
+  // Start centered on demo course hole 1
+  const hole = getCurrentHole();
+  map.setView([hole.pin.lat, hole.pin.lng], 17);
+
+  map.on('click', onMapClick);
+  renderHole();
+}
+
+// ─── MARKERS ──────────────────────────────────────────────────────────────────
+function makeIcon(color, label, size=24) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:${size}px;height:${size}px;
+      background:${color};
+      border:2px solid white;
+      border-radius:50% 50% 50% 0;
+      transform:rotate(-45deg);
+      box-shadow:0 2px 6px rgba(0,0,0,0.5);
+      display:flex;align-items:center;justify-content:center;
+    "><span style="transform:rotate(45deg);color:white;font-size:${size*0.35}px;font-weight:700;font-family:monospace;">${label}</span></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size/2, size],
+    popupAnchor: [0, -size]
+  });
+}
+
+function makePlayerIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:16px;height:16px;
+      background:#7ec87e;
+      border:3px solid white;
+      border-radius:50%;
+      box-shadow:0 0 0 4px rgba(126,200,126,0.3), 0 2px 8px rgba(0,0,0,0.4);
+    "></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+  });
+}
+
+function renderHole() {
+  // Clear existing markers
+  [pinMarker, frontMarker, backMarker, teeMarker].forEach(m => { if(m) map.removeLayer(m); });
+  if (distanceLine) { map.removeLayer(distanceLine); distanceLine = null; }
+
+  const course = allCourses[currentCourseIdx];
+  const hole = getCurrentHole();
+
+  // Apply any pin override
+  const pinOverride = loadPinOverride(course.id, currentHoleIdx);
+  const pinPos = pinOverride || hole.pin;
+
+  pinMarker = L.marker([pinPos.lat, pinPos.lng], { icon: makeIcon('#e63946','P',28) })
+    .addTo(map).bindPopup(`<b>Pin - Hole ${hole.hole}</b>`);
+
+  frontMarker = L.marker([hole.front.lat, hole.front.lng], { icon: makeIcon('#7ec87e','F',22) })
+    .addTo(map).bindPopup('Front of Green');
+
+  backMarker = L.marker([hole.back.lat, hole.back.lng], { icon: makeIcon('#c9a84c','B',22) })
+    .addTo(map).bindPopup('Back of Green');
+
+  teeMarker = L.marker([hole.tee.lat, hole.tee.lng], { icon: makeIcon('#457b9d','T',22) })
+    .addTo(map).bindPopup(`Tee Box - Hole ${hole.hole}`);
+
+  updateDistances();
+  updateHoleUI();
+  updateHoleDots();
+
+  // Fit map to hole
+  const bounds = L.latLngBounds([
+    [hole.tee.lat, hole.tee.lng],
+    [pinPos.lat, pinPos.lng]
+  ]);
+  map.fitBounds(bounds, { padding: [40,40] });
+}
+
+function updateDistances() {
+  if (!playerPos) return;
+  const course = allCourses[currentCourseIdx];
+  const hole = getCurrentHole();
+  const pinOverride = loadPinOverride(course.id, currentHoleIdx);
+  const pinPos = pinOverride || hole.pin;
+
+  const dPin   = haversineYards(playerPos.lat, playerPos.lng, pinPos.lat, pinPos.lng);
+  const dFront = haversineYards(playerPos.lat, playerPos.lng, hole.front.lat, hole.front.lng);
+  const dBack  = haversineYards(playerPos.lat, playerPos.lng, hole.back.lat, hole.back.lng);
+  const dTee   = haversineYards(playerPos.lat, playerPos.lng, hole.tee.lat, hole.tee.lng);
+
+  document.getElementById('distPin').textContent   = dPin;
+  document.getElementById('distFront').textContent = dFront;
+  document.getElementById('distBack').textContent  = dBack;
+  document.getElementById('distTee').textContent   = dTee;
+
+  // Draw line to pin
+  if (distanceLine) map.removeLayer(distanceLine);
+  distanceLine = L.polyline([
+    [playerPos.lat, playerPos.lng],
+    [pinPos.lat, pinPos.lng]
+  ], {
+    color: '#e63946',
+    weight: 2,
+    opacity: 0.7,
+    dashArray: '6,6'
+  }).addTo(map);
+  distanceLine.bindTooltip(`${dPin} yds`, {
+    permanent: true, direction: 'center',
+    className: 'distance-tooltip'
+  }).openTooltip();
+}
+
+// ─── GPS ──────────────────────────────────────────────────────────────────────
+function startGPS() {
+  if (!navigator.geolocation) {
+    document.getElementById('gpsLabel').textContent = 'No GPS';
+    return;
+  }
+  const dot = document.getElementById('gpsDot');
+  const label = document.getElementById('gpsLabel');
+  dot.className = 'gps-dot searching';
+  label.textContent = 'Searching…';
+
+  watchId = navigator.geolocation.watchPosition(
+    pos => {
+      playerPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      playerAccuracy = Math.round(pos.coords.accuracy);
+
+      dot.className = 'gps-dot active';
+      label.textContent = 'GPS Active';
+      document.getElementById('accuracyBadge').textContent = `±${playerAccuracy}m accuracy`;
+
+      if (!playerMarker) {
+        playerMarker = L.marker([playerPos.lat, playerPos.lng], { icon: makePlayerIcon(), zIndexOffset: 1000 }).addTo(map);
+      } else {
+        playerMarker.setLatLng([playerPos.lat, playerPos.lng]);
+      }
+      updateDistances();
+    },
+    err => {
+      dot.className = 'gps-dot';
+      label.textContent = 'GPS Error';
+      console.warn('GPS error:', err.message);
+    },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+  );
+}
+
+// ─── HOLE NAVIGATION ─────────────────────────────────────────────────────────
+function getCurrentHole() {
+  return allCourses[currentCourseIdx].holes[currentHoleIdx];
+}
+
+function goToHole(idx) {
+  const course = allCourses[currentCourseIdx];
+  if (idx < 0 || idx >= course.holes.length) return;
+  currentHoleIdx = idx;
+  renderHole();
+}
+
+function updateHoleUI() {
+  const hole = getCurrentHole();
+  document.getElementById('holeLabel').textContent = `Hole ${hole.hole}`;
+  document.getElementById('holeMeta').textContent = `Par ${hole.par} · ${hole.yards} yds`;
+}
+
+function updateHoleDots() {
+  const course = allCourses[currentCourseIdx];
+  const container = document.getElementById('holeDots');
+  container.innerHTML = '';
+  course.holes.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'hole-dot' + (i === currentHoleIdx ? ' active' : '');
+    dot.onclick = () => goToHole(i);
+    container.appendChild(dot);
+  });
+}
+
+// ─── ADD PIN MODE ─────────────────────────────────────────────────────────────
+function toggleAddPinMode() {
+  addPinMode = !addPinMode;
+  document.getElementById('pinBanner').classList.toggle('active', addPinMode);
+  document.getElementById('btnAddPin').textContent = addPinMode ? 'Cancel' : 'Add Pin';
+  document.getElementById('btnAddPin').style.background = addPinMode ? '#e63946' : '';
+  document.getElementById('btnAddPin').style.borderColor = addPinMode ? '#e63946' : '';
+  if (!addPinMode && tempPinMarker) {
+    map.removeLayer(tempPinMarker);
+    tempPinMarker = null;
+  }
+}
+
+function onMapClick(e) {
+  if (!addPinMode) return;
+  const { lat, lng } = e.latlng;
+
+  if (tempPinMarker) map.removeLayer(tempPinMarker);
+
+  tempPinMarker = L.marker([lat, lng], { icon: makeIcon('#ff6b6b','?',28) })
+    .addTo(map)
+    .bindPopup(`
+      <div style="font-family:monospace;font-size:12px;color:#0a1a0f;">
+        <b>Save as pin?</b><br>
+        ${lat.toFixed(6)}, ${lng.toFixed(6)}<br><br>
+        <button onclick="confirmPin(${lat},${lng})" style="
+          background:#e63946;color:white;border:none;padding:4px 10px;
+          border-radius:3px;cursor:pointer;font-family:monospace;
+        ">✓ Confirm Pin</button>
+      </div>
+    `).openPopup();
+}
+
+window.confirmPin = function(lat, lng) {
+  const course = allCourses[currentCourseIdx];
+  savePinOverride(course.id, currentHoleIdx, { lat, lng });
+  toggleAddPinMode();
+  if (tempPinMarker) { map.removeLayer(tempPinMarker); tempPinMarker = null; }
+  renderHole();
+};
+
+// ─── COURSE MODAL ─────────────────────────────────────────────────────────────
+function openCourseModal() {
+  const list = document.getElementById('courseList');
+  list.innerHTML = '';
+  allCourses.forEach((c, i) => {
+    const item = document.createElement('div');
+    item.className = 'course-item' + (i === currentCourseIdx ? ' selected' : '');
+    item.innerHTML = `<span class="course-name">${c.name}</span><span class="course-holes">${c.holes.length} holes</span>`;
+    item.onclick = () => {
+      currentCourseIdx = i;
+      currentHoleIdx = 0;
+      renderHole();
+      closeCourseModal();
+    };
+    list.appendChild(item);
+  });
+  document.getElementById('courseModal').classList.add('open');
+}
+
+function closeCourseModal() {
+  document.getElementById('courseModal').classList.remove('open');
+}
+
+// ─── CENTER MAP ───────────────────────────────────────────────────────────────
+function centerMap() {
+  if (playerPos) {
+    map.setView([playerPos.lat, playerPos.lng], 18);
+  } else {
+    const hole = getCurrentHole();
+    map.setView([hole.pin.lat, hole.pin.lng], 17);
+  }
+}
+
+// ─── EVENT LISTENERS ─────────────────────────────────────────────────────────
+document.getElementById('prevHole').onclick = () => goToHole(currentHoleIdx - 1);
+document.getElementById('nextHole').onclick = () => goToHole(currentHoleIdx + 1);
+document.getElementById('btnCourse').onclick = openCourseModal;
+document.getElementById('btnCenter').onclick = centerMap;
+document.getElementById('btnAddPin').onclick = toggleAddPinMode;
+document.getElementById('closeModal').onclick = closeCourseModal;
+document.getElementById('courseModal').onclick = e => { if(e.target.id === 'courseModal') closeCourseModal(); };
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+initMap();
+startGPS();
+</script>
+</body>
+</html>
