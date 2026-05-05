@@ -349,6 +349,30 @@
     flex-wrap: wrap;
   }
 
+  .score-settings {
+    margin-top: 16px;
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    display: grid;
+    gap: 10px;
+  }
+  .score-settings label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
+    color: #ddd;
+  }
+  .score-settings input[type="number"] {
+    width: 72px;
+  }
+  .score-settings input[type="checkbox"] {
+    transform: scale(1.1);
+  }
+
   .course-list { display: flex; flex-direction: column; gap: 6px; }
   .course-item {
     padding: 10px 12px;
@@ -468,6 +492,7 @@
       <div class="modal-label" id="scoreCourseName">Course scores</div>
       <div class="score-table" id="scoreTable"></div>
       <div class="score-summary" id="scoreSummary"></div>
+      <div class="score-settings" id="scoreSettings"></div>
     </div>
     <button class="btn" id="closeScoreModal" style="width:100%;margin-top:8px;">Close</button>
   </div>
@@ -540,6 +565,27 @@ function getCourseScores(courseId) {
   try { return JSON.parse(saved); } catch(e) { return {}; }
 }
 
+const DEFAULT_AUTO_SELECT_CONFIG = {
+  enabled: true,
+  accuracyMeters: 10,
+  stationaryYards: 5,
+  teeRadiusYards: 15
+};
+
+function loadAutoSelectConfig() {
+  const saved = localStorage.getItem('caddie_auto_select');
+  if (!saved) return { ...DEFAULT_AUTO_SELECT_CONFIG };
+  try {
+    return { ...DEFAULT_AUTO_SELECT_CONFIG, ...JSON.parse(saved) };
+  } catch (e) {
+    return { ...DEFAULT_AUTO_SELECT_CONFIG };
+  }
+}
+
+function saveAutoSelectConfig(config) {
+  localStorage.setItem('caddie_auto_select', JSON.stringify(config));
+}
+
 function saveCourseScores(courseId, scores) {
   const key = `caddie_scores_${courseId}`;
   localStorage.setItem(key, JSON.stringify(scores));
@@ -602,6 +648,46 @@ function openScoreModal() {
 
   document.getElementById('scoreModal').classList.add('open');
   renderScoreSummary(course, scores);
+  renderAutoSelectSettings();
+}
+
+function renderAutoSelectSettings() {
+  const config = autoSelectConfig;
+  const settings = document.getElementById('scoreSettings');
+  settings.innerHTML = '';
+
+  const enabledLabel = document.createElement('label');
+  enabledLabel.innerHTML = `Auto hole select <input type="checkbox" id="autoSelectEnabled">`;
+  settings.appendChild(enabledLabel);
+  document.getElementById('autoSelectEnabled').checked = config.enabled;
+
+  const accuracyLabel = document.createElement('label');
+  accuracyLabel.innerHTML = `Max accuracy (m) <input type="number" id="autoSelectAccuracy" min="1" step="1">`;
+  settings.appendChild(accuracyLabel);
+  document.getElementById('autoSelectAccuracy').value = config.accuracyMeters;
+
+  const stationaryLabel = document.createElement('label');
+  stationaryLabel.innerHTML = `Max movement (yd) <input type="number" id="autoSelectStationary" min="0" step="1">`;
+  settings.appendChild(stationaryLabel);
+  document.getElementById('autoSelectStationary').value = config.stationaryYards;
+
+  const teeRadiusLabel = document.createElement('label');
+  teeRadiusLabel.innerHTML = `Tee auto-select radius (yd) <input type="number" id="autoSelectTeeRadius" min="1" step="1">`;
+  settings.appendChild(teeRadiusLabel);
+  document.getElementById('autoSelectTeeRadius').value = config.teeRadiusYards;
+
+  ['autoSelectEnabled','autoSelectAccuracy','autoSelectStationary','autoSelectTeeRadius'].forEach(id => {
+    document.getElementById(id).onchange = () => {
+      const updated = {
+        enabled: document.getElementById('autoSelectEnabled').checked,
+        accuracyMeters: Number(document.getElementById('autoSelectAccuracy').value) || DEFAULT_AUTO_SELECT_CONFIG.accuracyMeters,
+        stationaryYards: Number(document.getElementById('autoSelectStationary').value) || DEFAULT_AUTO_SELECT_CONFIG.stationaryYards,
+        teeRadiusYards: Number(document.getElementById('autoSelectTeeRadius').value) || DEFAULT_AUTO_SELECT_CONFIG.teeRadiusYards
+      };
+      autoSelectConfig = { ...DEFAULT_AUTO_SELECT_CONFIG, ...updated };
+      saveAutoSelectConfig(autoSelectConfig);
+    };
+  });
 }
 
 function renderScoreSummary(course, scores) {
@@ -640,6 +726,8 @@ let teeMarker = null;
 let distanceLine = null;
 let holeLine = null;
 let watchId = null;
+let lastGpsPos = null;
+let autoSelectConfig = loadAutoSelectConfig();
 
 // ─── HAVERSINE ────────────────────────────────────────────────────────────────
 function haversineYards(lat1, lng1, lat2, lng2) {
@@ -761,8 +849,13 @@ function renderHole() {
   map.fitBounds(bounds, { padding: [40,40] });
 }
 
-function updateDistances() {
+function updateDistances(movementYards = 0) {
   if (!playerPos) return;
+  const nearbyHoleIndex = shouldAutoSelectHole(movementYards) ? getNearestTeeHoleIndex() : -1;
+  if (nearbyHoleIndex >= 0 && nearbyHoleIndex !== currentHoleIdx) {
+    goToHole(nearbyHoleIndex);
+    return;
+  }
   const course = allCourses[currentCourseIdx];
   const hole = getCurrentHole();
   const pinOverride = loadPinOverride(course.id, currentHoleIdx);
@@ -808,7 +901,10 @@ function startGPS() {
 
   watchId = navigator.geolocation.watchPosition(
     pos => {
-      playerPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      const movementYards = lastGpsPos ? haversineYards(lastGpsPos.lat, lastGpsPos.lng, newPos.lat, newPos.lng) : 0;
+      lastGpsPos = newPos;
+      playerPos = newPos;
       playerAccuracy = Math.round(pos.coords.accuracy);
 
       dot.className = 'gps-dot active';
@@ -820,7 +916,7 @@ function startGPS() {
       } else {
         playerMarker.setLatLng([playerPos.lat, playerPos.lng]);
       }
-      updateDistances();
+      updateDistances(movementYards);
     },
     err => {
       dot.className = 'gps-dot';
@@ -836,11 +932,33 @@ function getCurrentHole() {
   return allCourses[currentCourseIdx].holes[currentHoleIdx];
 }
 
+function getNearestTeeHoleIndex() {
+  if (!playerPos) return -1;
+  const course = allCourses[currentCourseIdx];
+  let nearest = -1;
+  let minDist = Infinity;
+  course.holes.forEach((hole, index) => {
+    const d = haversineYards(playerPos.lat, playerPos.lng, hole.tee.lat, hole.tee.lng);
+    if (d <= autoSelectConfig.teeRadiusYards && d < minDist) {
+      minDist = d;
+      nearest = index;
+    }
+  });
+  return nearest;
+}
+
 function goToHole(idx) {
   const course = allCourses[currentCourseIdx];
   if (idx < 0 || idx >= course.holes.length) return;
   currentHoleIdx = idx;
   renderHole();
+}
+
+function shouldAutoSelectHole(movementYards) {
+  if (!autoSelectConfig.enabled) return false;
+  if (playerAccuracy === null || playerAccuracy > autoSelectConfig.accuracyMeters) return false;
+  if (movementYards > autoSelectConfig.stationaryYards) return false;
+  return true;
 }
 
 function updateHoleUI() {
