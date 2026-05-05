@@ -310,21 +310,32 @@
 
   .score-table {
     display: grid;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .score-row {
+    display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 8px 10px;
     align-items: center;
-    margin-top: 8px;
   }
-  .score-table .score-header,
-  .score-table .score-cell {
+  .score-row.score-header-row {
+    font-weight: 600;
+    color: var(--gold);
+  }
+  .score-row .score-cell,
+  .score-row .score-header {
     font-size: 12px;
     padding: 8px 6px;
     border-radius: 6px;
     background: rgba(255,255,255,0.05);
     color: var(--cream);
   }
-  .score-table .score-header { font-weight: 600; color: var(--gold); }
-  .score-input {
+  .score-row.score-header-row .score-header {
+    background: rgba(201,168,76,0.12);
+    color: var(--gold);
+  }
+  .score-row .score-input {
     width: 100%;
     padding: 6px 8px;
     border: 1px solid rgba(255,255,255,0.15);
@@ -334,7 +345,7 @@
     font-family: 'IBM Plex Mono', monospace;
     font-size: 12px;
   }
-  .score-input:focus {
+  .score-row .score-input:focus {
     outline: none;
     border-color: var(--gold);
     background: rgba(255,255,255,0.12);
@@ -373,7 +384,47 @@
     transform: scale(1.1);
   }
 
+  .score-table .score-row .hole-label {
+    font-weight: 700;
+    color: var(--white);
+  }
+
   .course-list { display: flex; flex-direction: column; gap: 6px; }
+
+  @media (max-width: 640px) {
+    .score-table {
+      gap: 12px;
+    }
+    .score-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.06);
+    }
+    .score-row.score-header-row {
+      display: none;
+    }
+    .score-row .score-cell,
+    .score-row .score-header {
+      padding: 10px 12px;
+    }
+    .score-row .hole-cell {
+      grid-column: 1 / -1;
+      font-weight: 700;
+      background: rgba(255,255,255,0.1);
+    }
+    .score-row .label-cell {
+      grid-column: 1 / -1;
+      background: rgba(201,168,76,0.12);
+      color: var(--gold);
+    }
+    .score-row .score-input,
+    .score-row .score-cell:nth-child(4) input {
+      width: 100%;
+      min-width: 0;
+    }
+  }
   .course-item {
     padding: 10px 12px;
     border: 1px solid var(--green-mid);
@@ -598,32 +649,39 @@ function openScoreModal() {
 
   const table = document.getElementById('scoreTable');
   table.innerHTML = '';
-  ['Hole','Par','Yards','Score',''].forEach(text => {
+
+  const headerRow = document.createElement('div');
+  headerRow.className = 'score-row score-header-row';
+  ['Hole', 'Par', 'Yards', 'Score', 'Info'].forEach(text => {
     const header = document.createElement('div');
     header.className = 'score-header';
     header.textContent = text;
-    table.appendChild(header);
+    headerRow.appendChild(header);
   });
+  table.appendChild(headerRow);
 
   course.holes.forEach(hole => {
     const scoreValue = scores[hole.hole] || '';
+    const row = document.createElement('div');
+    row.className = 'score-row';
+
     const holeCell = document.createElement('div');
-    holeCell.className = 'score-cell';
-    holeCell.textContent = hole.hole;
-    table.appendChild(holeCell);
+    holeCell.className = 'score-cell hole-cell';
+    holeCell.textContent = `Hole ${hole.hole}`;
+    row.appendChild(holeCell);
 
     const parCell = document.createElement('div');
-    parCell.className = 'score-cell';
+    parCell.className = 'score-cell par-cell';
     parCell.textContent = hole.par;
-    table.appendChild(parCell);
+    row.appendChild(parCell);
 
     const yardsCell = document.createElement('div');
-    yardsCell.className = 'score-cell';
+    yardsCell.className = 'score-cell yards-cell';
     yardsCell.textContent = hole.yards;
-    table.appendChild(yardsCell);
+    row.appendChild(yardsCell);
 
     const inputCell = document.createElement('div');
-    inputCell.className = 'score-cell';
+    inputCell.className = 'score-cell score-input-cell';
     const input = document.createElement('input');
     input.type = 'number';
     input.min = '1';
@@ -638,12 +696,14 @@ function openScoreModal() {
       renderScoreSummary(course, scores);
     };
     inputCell.appendChild(input);
-    table.appendChild(inputCell);
+    row.appendChild(inputCell);
 
-    const parLabel = document.createElement('div');
-    parLabel.className = 'score-cell';
-    parLabel.textContent = hole.par === 3 ? 'Par 3' : hole.par === 4 ? 'Par 4' : hole.par === 5 ? 'Par 5' : `Par ${hole.par}`;
-    table.appendChild(parLabel);
+    const labelCell = document.createElement('div');
+    labelCell.className = 'score-cell label-cell';
+    labelCell.textContent = hole.par === 3 ? 'Par 3' : hole.par === 4 ? 'Par 4' : hole.par === 5 ? 'Par 5' : `Par ${hole.par}`;
+    row.appendChild(labelCell);
+
+    table.appendChild(row);
   });
 
   document.getElementById('scoreModal').classList.add('open');
