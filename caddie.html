@@ -350,6 +350,33 @@
     border-color: var(--gold);
     background: rgba(255,255,255,0.12);
   }
+  .score-row .score-select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.08);
+    color: var(--cream);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .score-row .score-select:focus {
+    outline: none;
+    border-color: var(--gold);
+    background: rgba(255,255,255,0.12);
+  }
+  .score-row .score-select option {
+    background: var(--green-deep);
+    color: var(--cream);
+  }
+  .score-label {
+    font-size: 10px;
+    color: var(--gold);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+  }
   .score-summary {
     margin-top: 12px;
     font-size: 13px;
@@ -672,30 +699,40 @@ function openScoreModal() {
 
     const parCell = document.createElement('div');
     parCell.className = 'score-cell par-cell';
-    parCell.textContent = hole.par;
+    parCell.innerHTML = `<span class="score-label">Par</span> ${hole.par}`;
     row.appendChild(parCell);
 
     const yardsCell = document.createElement('div');
     yardsCell.className = 'score-cell yards-cell';
-    yardsCell.textContent = hole.yards;
+    yardsCell.innerHTML = `<span class="score-label">Yds</span> ${hole.yards}`;
     row.appendChild(yardsCell);
 
     const inputCell = document.createElement('div');
     inputCell.className = 'score-cell score-input-cell';
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.min = '1';
-    input.className = 'score-input';
-    input.value = scoreValue;
-    input.oninput = () => {
-      const newScore = input.value ? Number(input.value) : '';
-      if (newScore && newScore < 1) return;
+    const select = document.createElement('select');
+    select.className = 'score-select';
+    
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = '—';
+    select.appendChild(emptyOption);
+    
+    for (let i = 1; i <= 9; i++) {
+      const option = document.createElement('option');
+      option.value = i;
+      option.textContent = i;
+      select.appendChild(option);
+    }
+    
+    select.value = scoreValue;
+    select.onchange = () => {
+      const newScore = select.value ? Number(select.value) : '';
       scores[hole.hole] = newScore || undefined;
-      if (!input.value) delete scores[hole.hole];
+      if (!select.value) delete scores[hole.hole];
       saveCourseScores(course.id, scores);
       renderScoreSummary(course, scores);
     };
-    inputCell.appendChild(input);
+    inputCell.appendChild(select);
     row.appendChild(inputCell);
 
     const labelCell = document.createElement('div');
