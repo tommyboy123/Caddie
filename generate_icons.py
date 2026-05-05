@@ -1,70 +1,137 @@
 from PIL import Image, ImageDraw
+import math
 
-def create_golf_icon(size):
-    # Green background (forest green)
-    img = Image.new('RGBA', (size, size), (34, 139, 34, 255))
-    draw = ImageDraw.Draw(img)
+def create_gradient_circle(draw, center, radius, fill_color, num_rings=20):
+    """Create a radial gradient effect by drawing concentric circles"""
+    r, g, b, a = fill_color
+    for i in range(num_rings, 0, -1):
+        ratio = i / num_rings
+        # Lighten the color as we go inward
+        alpha_blend = int(a * ratio)
+        # Adjust brightness for gradient effect
+        shade = int(255 * (1 - ratio * 0.3))  # Slight lightening towards center
+        color = (min(255, r + (255-r) * (1-ratio) * 0.4), 
+                 min(255, g + (255-g) * (1-ratio) * 0.4),
+                 min(255, b + (255-b) * (1-ratio) * 0.4),
+                 alpha_blend)
+        r_i = int(radius * ratio)
+        draw.ellipse([center[0]-r_i, center[1]-r_i, 
+                     center[0]+r_i, center[1]+r_i], 
+                    fill=color, outline=None)
+
+def create_golf_icon_hq(size):
+    """Create a high-quality golf icon with gradients and realistic proportions"""
+    # Darker, richer green background
+    background = Image.new('RGBA', (size, size), (25, 100, 25, 255))
+    draw = ImageDraw.Draw(background, 'RGBA')
     
-    # Calculate scaling
+    # Add subtle gradient to background (darker at edges)
+    gradient = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    grad_draw = ImageDraw.Draw(gradient, 'RGBA')
+    for i in range(size // 2):
+        alpha = int(30 * (i / (size // 2)))
+        grad_draw.ellipse([i, i, size-i, size-i], 
+                         outline=(0, 0, 0, alpha), width=1)
+    background.paste(gradient, (0, 0), gradient)
+    
+    draw = ImageDraw.Draw(background, 'RGBA')
     scale = size / 512
     
-    # Draw golf ball (white circle with dimples)
-    ball_center_x = int(256 * scale)
-    ball_center_y = int(320 * scale)
-    ball_radius = int(60 * scale)
+    # ===== GOLF BALL =====
+    ball_center_x = int(280 * scale)
+    ball_center_y = int(310 * scale)
+    ball_radius = int(65 * scale)
     
-    draw.ellipse(
-        [ball_center_x - ball_radius, ball_center_y - ball_radius,
-         ball_center_x + ball_radius, ball_center_y + ball_radius],
-        fill=(255, 255, 255, 255),
-        outline=(200, 200, 200, 255),
-        width=int(2 * scale)
-    )
+    # Create ball with gradient (white center, gray edges)
+    create_gradient_circle(draw, (ball_center_x, ball_center_y), 
+                         ball_radius, (255, 255, 255, 255), num_rings=25)
     
-    # Add dimples to golf ball
-    dimple_radius = int(8 * scale)
-    for dx in [-25, 0, 25]:
-        for dy in [-25, 0, 25]:
-            x = ball_center_x + dx * scale
-            y = ball_center_y + dy * scale
-            draw.ellipse(
-                [x - dimple_radius, y - dimple_radius,
-                 x + dimple_radius, y + dimple_radius],
-                fill=(220, 220, 220, 255)
-            )
+    # Ball dimples (concentric pattern for realism)
+    dimple_radius = int(6 * scale)
+    dimple_spacing = int(32 * scale)
     
-    # Draw golf club (simple clubface)
-    club_x = int(180 * scale)
-    club_y = int(140 * scale)
-    club_width = int(100 * scale)
-    club_height = int(120 * scale)
+    for angle in range(0, 360, 45):
+        rad = math.radians(angle)
+        dx = int(math.cos(rad) * dimple_spacing)
+        dy = int(math.sin(rad) * dimple_spacing)
+        x = ball_center_x + dx
+        y = ball_center_y + dy
+        # Draw multiple dimples in a pattern
+        for r in [int(4*scale), int(2*scale)]:
+            draw.ellipse([x-r, y-r, x+r, y+r], 
+                        fill=(200, 200, 200, 180), outline=None)
     
-    # Club head (clubface - tilted rectangle)
-    club_points = [
-        (club_x, club_y),
-        (club_x + club_width, club_y - int(30 * scale)),
-        (club_x + club_width, club_y + club_height),
-        (club_x, club_y + club_height + int(30 * scale))
+    # Add highlight on ball for glossiness
+    highlight_x = ball_center_x - int(20 * scale)
+    highlight_y = ball_center_y - int(20 * scale)
+    highlight_r = int(15 * scale)
+    draw.ellipse([highlight_x - highlight_r, highlight_y - highlight_r,
+                 highlight_x + highlight_r, highlight_y + highlight_r],
+                fill=(255, 255, 255, 100), outline=None)
+    
+    # ===== GOLF CLUB =====
+    club_start_x = int(150 * scale)
+    club_start_y = int(380 * scale)
+    
+    # Shaft (brown with slight gradient)
+    shaft_width = int(14 * scale)
+    shaft_length = int(200 * scale)
+    shaft_end_x = club_start_x - int(60 * scale)
+    shaft_end_y = club_start_y + shaft_length
+    
+    # Draw shaft with shading using lines
+    for i in range(int(shaft_width), 0, -1):
+        alpha = int(255 * (i / shaft_width))
+        shade = int(101 - 20 * ((shaft_width - i) / shaft_width))
+        draw.line([(club_start_x - i//2, club_start_y), 
+                  (shaft_end_x - i//2, shaft_end_y)],
+                 fill=(shade, 47 + shade//4, 20, alpha), width=int(2*scale))
+    
+    # Draw main shaft body
+    shaft_points = [
+        (club_start_x, club_start_y),
+        (club_start_x - shaft_width, club_start_y),
+        (shaft_end_x - shaft_width, shaft_end_y),
+        (shaft_end_x, shaft_end_y)
     ]
-    draw.polygon(club_points, fill=(184, 134, 11, 255), outline=(139, 100, 0, 255))
+    draw.polygon(shaft_points, fill=(101, 67, 33, 255), outline=(70, 45, 20, 200))
     
-    # Club shaft
-    shaft_width = int(12 * scale)
-    shaft_x = club_x - int(40 * scale)
-    draw.rectangle(
-        [shaft_x, club_y + club_height, shaft_x + shaft_width, club_y + club_height + int(150 * scale)],
-        fill=(101, 67, 33, 255),
-        outline=(70, 45, 20, 255)
-    )
+    # Clubhead (steeper angle, more realistic)
+    head_width = int(110 * scale)
+    head_height = int(140 * scale)
     
-    return img
+    # Tilted clubface polygon
+    head_points = [
+        (club_start_x, club_start_y),
+        (club_start_x + head_width, club_start_y - int(50 * scale)),
+        (club_start_x + head_width - int(20*scale), club_start_y + head_height),
+        (club_start_x - int(20*scale), club_start_y + head_height + int(50*scale))
+    ]
+    
+    # Draw clubhead with gradient effect (lighter in center)
+    draw.polygon(head_points, fill=(200, 160, 30, 255), outline=(140, 100, 10, 255))
+    
+    # Add shine/highlight on clubface
+    shine_points = [
+        (club_start_x + int(20*scale), club_start_y + int(20*scale)),
+        (club_start_x + int(70*scale), club_start_y - int(20*scale)),
+        (club_start_x + int(80*scale), club_start_y + int(40*scale)),
+        (club_start_x + int(40*scale), club_start_y + int(60*scale))
+    ]
+    draw.polygon(shine_points, fill=(255, 230, 150, 80), outline=None)
+    
+    return background
 
 # Generate 192x192 icon
-icon_192 = create_golf_icon(192)
+print("Generating 192x192 icon...")
+icon_192 = create_golf_icon_hq(192)
 icon_192.save('/Users/tom/Documents/GitHub/Caddie/icon-192.png')
 print("✓ Created icon-192.png")
 
 # Generate 512x512 icon
-icon_512 = create_golf_icon(512)
+print("Generating 512x512 icon...")
+icon_512 = create_golf_icon_hq(512)
 icon_512.save('/Users/tom/Documents/GitHub/Caddie/icon-512.png')
 print("✓ Created icon-512.png")
+
+print("\nIcons updated with gradients, realistic proportions, and glossy effects!")
