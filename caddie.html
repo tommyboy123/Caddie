@@ -308,6 +308,47 @@
     margin-bottom: 6px;
   }
 
+  .score-table {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px 10px;
+    align-items: center;
+    margin-top: 8px;
+  }
+  .score-table .score-header,
+  .score-table .score-cell {
+    font-size: 12px;
+    padding: 8px 6px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+    color: var(--cream);
+  }
+  .score-table .score-header { font-weight: 600; color: var(--gold); }
+  .score-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.08);
+    color: var(--cream);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+  }
+  .score-input:focus {
+    outline: none;
+    border-color: var(--gold);
+    background: rgba(255,255,255,0.12);
+  }
+  .score-summary {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--cream);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
   .course-list { display: flex; flex-direction: column; gap: 6px; }
   .course-item {
     padding: 10px 12px;
@@ -402,6 +443,7 @@
   <div class="action-row">
     <button class="btn" id="btnCourse">Course</button>
     <button class="btn" id="btnCenter">Center</button>
+    <button class="btn" id="btnScore">Score</button>
   </div>
   <div class="accuracy-badge" id="accuracyBadge"></div>
 </div>
@@ -415,6 +457,19 @@
       <div class="course-list" id="courseList"></div>
     </div>
     <button class="btn" id="closeModal" style="width:100%;margin-top:8px;">Close</button>
+  </div>
+</div>
+
+<!-- Scorecard Modal -->
+<div class="modal-overlay" id="scoreModal">
+  <div class="modal">
+    <div class="modal-title">Scorecard</div>
+    <div class="modal-section">
+      <div class="modal-label" id="scoreCourseName">Course scores</div>
+      <div class="score-table" id="scoreTable"></div>
+      <div class="score-summary" id="scoreSummary"></div>
+    </div>
+    <button class="btn" id="closeScoreModal" style="width:100%;margin-top:8px;">Close</button>
   </div>
 </div>
 
@@ -476,6 +531,98 @@ function loadPinOverride(courseId, holeIdx) {
   const key = `caddie_pin_${courseId}_${holeIdx}`;
   const v = localStorage.getItem(key);
   return v ? JSON.parse(v) : null;
+}
+
+function getCourseScores(courseId) {
+  const key = `caddie_scores_${courseId}`;
+  const saved = localStorage.getItem(key);
+  if (!saved) return {};
+  try { return JSON.parse(saved); } catch(e) { return {}; }
+}
+
+function saveCourseScores(courseId, scores) {
+  const key = `caddie_scores_${courseId}`;
+  localStorage.setItem(key, JSON.stringify(scores));
+}
+
+function openScoreModal() {
+  const course = allCourses[currentCourseIdx];
+  const scores = getCourseScores(course.id);
+  document.getElementById('scoreCourseName').textContent = `${course.name} — Scorecard`;
+
+  const table = document.getElementById('scoreTable');
+  table.innerHTML = '';
+  ['Hole','Par','Yards','Score',''].forEach(text => {
+    const header = document.createElement('div');
+    header.className = 'score-header';
+    header.textContent = text;
+    table.appendChild(header);
+  });
+
+  course.holes.forEach(hole => {
+    const scoreValue = scores[hole.hole] || '';
+    const holeCell = document.createElement('div');
+    holeCell.className = 'score-cell';
+    holeCell.textContent = hole.hole;
+    table.appendChild(holeCell);
+
+    const parCell = document.createElement('div');
+    parCell.className = 'score-cell';
+    parCell.textContent = hole.par;
+    table.appendChild(parCell);
+
+    const yardsCell = document.createElement('div');
+    yardsCell.className = 'score-cell';
+    yardsCell.textContent = hole.yards;
+    table.appendChild(yardsCell);
+
+    const inputCell = document.createElement('div');
+    inputCell.className = 'score-cell';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.className = 'score-input';
+    input.value = scoreValue;
+    input.oninput = () => {
+      const newScore = input.value ? Number(input.value) : '';
+      if (newScore && newScore < 1) return;
+      scores[hole.hole] = newScore || undefined;
+      if (!input.value) delete scores[hole.hole];
+      saveCourseScores(course.id, scores);
+      renderScoreSummary(course, scores);
+    };
+    inputCell.appendChild(input);
+    table.appendChild(inputCell);
+
+    const parLabel = document.createElement('div');
+    parLabel.className = 'score-cell';
+    parLabel.textContent = hole.par === 3 ? 'Par 3' : hole.par === 4 ? 'Par 4' : hole.par === 5 ? 'Par 5' : `Par ${hole.par}`;
+    table.appendChild(parLabel);
+  });
+
+  document.getElementById('scoreModal').classList.add('open');
+  renderScoreSummary(course, scores);
+}
+
+function renderScoreSummary(course, scores) {
+  const summary = document.getElementById('scoreSummary');
+  const holes = course.holes.length;
+  const parTotal = course.holes.reduce((sum, hole) => sum + hole.par, 0);
+  const scoreTotal = course.holes.reduce((sum, hole) => {
+    const value = scores[hole.hole];
+    return sum + (typeof value === 'number' ? value : 0);
+  }, 0);
+  const entered = Object.values(scores).filter(v => typeof v === 'number').length;
+  summary.innerHTML = `
+    <div><strong>Holes</strong> ${holes}</div>
+    <div><strong>Par</strong> ${parTotal}</div>
+    <div><strong>Score</strong> ${entered ? scoreTotal : '—'}</div>
+    <div><strong>Entered</strong> ${entered}/${holes}</div>
+  `;
+}
+
+function closeScoreModal() {
+  document.getElementById('scoreModal').classList.remove('open');
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -593,9 +740,8 @@ function renderHole() {
 
   holeLine = L.polyline(holePath, {
     color: '#999',
-    weight: 2,
-    opacity: 0.7,
-    dashArray: '4,6'
+    weight: 4,
+    opacity: 0.8
   }).addTo(map);
   holeLine.bindTooltip(`Hole ${hole.hole}`, {
     permanent: true,
@@ -753,8 +899,11 @@ document.getElementById('prevHole').onclick = () => goToHole(currentHoleIdx - 1)
 document.getElementById('nextHole').onclick = () => goToHole(currentHoleIdx + 1);
 document.getElementById('btnCourse').onclick = openCourseModal;
 document.getElementById('btnCenter').onclick = centerMap;
+document.getElementById('btnScore').onclick = openScoreModal;
 document.getElementById('closeModal').onclick = closeCourseModal;
+document.getElementById('closeScoreModal').onclick = closeScoreModal;
 document.getElementById('courseModal').onclick = e => { if(e.target.id === 'courseModal') closeCourseModal(); };
+document.getElementById('scoreModal').onclick = e => { if(e.target.id === 'scoreModal') closeScoreModal(); };
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 initMap();
